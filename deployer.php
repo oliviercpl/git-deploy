@@ -72,14 +72,38 @@ if (!empty(TOKEN) && isset($_SERVER["HTTP_X_HUB_SIGNATURE"]) && $token !== hash_
     // check if pushed branch matches branch specified in config
     if ($json["ref"] === BRANCH) {
         fputs($file, $content . PHP_EOL);
+		
+		// write to the log
+        fputs($file, "*** AUTO PULL INITIATED ***" . "\n");
+		
+		/**
+		 * Attempt to execute BEFORE_PULL if specified
+		 */
+		if (!empty(BEFORE_PULL)) {
+			// write to the log
+			fputs($file, "*** BEFORE_PULL INITIATED ***" . "\n");
+
+			// execute the command, returning the output and exit code
+			exec(BEFORE_PULL . " 2>&1", $output, $exit);
+
+			// reformat the output as a string
+			$output = (!empty($output) ? implode("\n", $output) : "[no output]") . "\n";
+
+			// if an error occurred, return 500 and log the error
+			if ($exit !== 0) {
+				http_response_code(500);
+				$output = "=== ERROR: BEFORE_PULL `" . BEFORE_PULL . "` failed ===\n" . $output;
+			}
+
+			// write the output to the log and the body
+			fputs($file, $output);
+			echo $output;
+		}
 
         // ensure directory is a repository
         if (file_exists($DIR . ".git") && is_dir($DIR)) {
             // change directory to the repository
-            chdir($DIR);
-
-            // write to the log
-            fputs($file, "*** AUTO PULL INITIATED ***" . "\n");
+            chdir($DIR);            
 
             /**
              * Attempt to reset specific hash if specified
@@ -103,30 +127,7 @@ if (!empty(TOKEN) && isset($_SERVER["HTTP_X_HUB_SIGNATURE"]) && $token !== hash_
                 fputs($file, $output);
                 echo $output;
             }
-
-            /**
-             * Attempt to execute BEFORE_PULL if specified
-             */
-            if (!empty(BEFORE_PULL)) {
-                // write to the log
-                fputs($file, "*** BEFORE_PULL INITIATED ***" . "\n");
-
-                // execute the command, returning the output and exit code
-                exec(BEFORE_PULL . " 2>&1", $output, $exit);
-
-                // reformat the output as a string
-                $output = (!empty($output) ? implode("\n", $output) : "[no output]") . "\n";
-
-                // if an error occurred, return 500 and log the error
-                if ($exit !== 0) {
-                    http_response_code(500);
-                    $output = "=== ERROR: BEFORE_PULL `" . BEFORE_PULL . "` failed ===\n" . $output;
-                }
-
-                // write the output to the log and the body
-                fputs($file, $output);
-                echo $output;
-            }
+            
 
             /**
              * Attempt to pull, returing the output and exit code
